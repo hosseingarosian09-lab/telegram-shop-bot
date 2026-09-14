@@ -6,6 +6,8 @@ from app.config import settings
 from app.database.init_db import init_database
 from app.handlers.cart import router as cart_router
 from app.handlers.catalog import router as catalog_router
+from app.handlers.checkout import router as checkout_router
+from app.handlers.orders import router as orders_router
 from app.handlers.start import router as start_router
 
 
@@ -16,8 +18,10 @@ async def main() -> None:
     dp = Dispatcher()
 
     dp.include_router(start_router)
+    dp.include_router(checkout_router)
     dp.include_router(catalog_router)
     dp.include_router(cart_router)
+    dp.include_router(orders_router)
 
     print("Bot is running with Long Polling.")
     print("Press Ctrl+C to stop.")
