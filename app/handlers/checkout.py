@@ -35,6 +35,21 @@ def normalize_phone(value: str) -> str:
     )
 
 
+# Keep this before state-specific text handlers.
+@router.message(Command("cancel"))
+async def cancel_checkout_command(message: Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+
+    if current_state is None:
+        await message.answer("فرآیند فعالی برای لغو وجود ندارد.")
+        return
+
+    await state.clear()
+    await message.answer(
+        "تسویه حساب لغو شد. سبد خرید شما دست‌نخورده باقی ماند."
+    )
+
+
 @router.callback_query(F.data == "cart:checkout")
 async def begin_checkout(callback: CallbackQuery, state: FSMContext) -> None:
     snapshot = await get_cart_snapshot(callback.from_user.id)
@@ -200,17 +215,3 @@ async def cancel_checkout_callback(callback: CallbackQuery, state: FSMContext) -
         )
 
     await callback.answer()
-
-
-@router.message(Command("cancel"))
-async def cancel_checkout_command(message: Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-
-    if current_state is None:
-        await message.answer("فرآیند فعالی برای لغو وجود ندارد.")
-        return
-
-    await state.clear()
-    await message.answer(
-        "تسویه حساب لغو شد. سبد خرید شما دست‌نخورده باقی ماند."
-    )
