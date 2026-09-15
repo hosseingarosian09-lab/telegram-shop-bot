@@ -348,8 +348,8 @@ function Get-AdminIds {
     Write-Host "If you do not know your Telegram ID yet:"
     Write-Host "  - Press Enter now."
     Write-Host "  - Finish setup and run run.bat."
-    Write-Host "  - Send /start to the bot."
-    Write-Host "  - Your Telegram ID will be printed in the terminal."
+    Write-Host "  - Send /myid to the bot."
+    Write-Host "  - The bot will reply with your Telegram User ID."
     Write-Host "  - Run setup.bat again and enter that ID."
     Write-Host ""
 
@@ -462,11 +462,12 @@ Write-Host "  1. Double-click run.bat."
 Write-Host "  2. Open your bot in Telegram."
 Write-Host "  3. Send /start."
 Write-Host "  4. Confirm that the main menu appears."
+Write-Host "  5. Use /myid if you still need your Telegram User ID."
 Write-Host ""
 
 if ([string]::IsNullOrWhiteSpace($adminIds)) {
     Write-Warn "ADMIN_IDS is still empty."
-    Write-Host "After /start, copy the Telegram ID printed in the terminal."
+    Write-Host "Send /myid to the bot and copy the Telegram User ID it replies with."
     Write-Host "Then run setup.bat again and enter that ID."
 }
 else {

@@ -2,12 +2,12 @@ import re
 from html import escape
 
 from aiogram import F, Router
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.keyboards.checkout import (
     checkout_cancel_keyboard,
+    checkout_cancelled_keyboard,
     checkout_failed_keyboard,
     checkout_review_keyboard,
 )
@@ -17,7 +17,6 @@ from app.states.checkout import CheckoutStates
 
 
 router = Router(name="checkout")
-
 PHONE_PATTERN = re.compile(r"^\+?\d{8,15}$")
 
 
@@ -35,27 +34,19 @@ def normalize_phone(value: str) -> str:
     )
 
 
-# Keep this before state-specific text handlers.
-@router.message(Command("cancel"))
-async def cancel_checkout_command(message: Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-
-    if current_state is None:
-        await message.answer("فرآیند فعالی برای لغو وجود ندارد.")
-        return
-
-    await state.clear()
-    await message.answer(
-        "تسویه حساب لغو شد. سبد خرید شما دست‌نخورده باقی ماند."
-    )
-
-
 @router.callback_query(F.data == "cart:checkout")
 async def begin_checkout(callback: CallbackQuery, state: FSMContext) -> None:
     snapshot = await get_cart_snapshot(callback.from_user.id)
 
     if not snapshot.entries:
         await callback.answer("سبد خرید شما خالی است.", show_alert=True)
+        return
+
+    if not snapshot.can_checkout:
+        await callback.answer(
+            "بعضی اقلام سبد دیگر قابل سفارش نیستند. ابتدا سبد را اصلاح کنید.",
+            show_alert=True,
+        )
         return
 
     await state.clear()
@@ -83,7 +74,6 @@ async def receive_name(message: Message, state: FSMContext) -> None:
 
     await state.update_data(customer_name=name)
     await state.set_state(CheckoutStates.waiting_phone)
-
     await message.answer(
         "مرحله ۲ از ۳\n\nشماره تماس را وارد کنید.\nمثال: 09123456789",
         reply_markup=checkout_cancel_keyboard(),
@@ -103,7 +93,6 @@ async def receive_phone(message: Message, state: FSMContext) -> None:
 
     await state.update_data(phone=phone)
     await state.set_state(CheckoutStates.waiting_address)
-
     await message.answer(
         "مرحله ۳ از ۳\n\nآدرس کامل تحویل را وارد کنید:",
         reply_markup=checkout_cancel_keyboard(),
@@ -121,20 +110,22 @@ async def receive_address(message: Message, state: FSMContext) -> None:
         )
         return
 
-    await state.update_data(address=address)
-    await state.set_state(CheckoutStates.confirming)
-
     if message.from_user is None:
         await state.clear()
         return
 
-    data = await state.get_data()
     snapshot = await get_cart_snapshot(message.from_user.id)
-
-    if not snapshot.entries:
+    if not snapshot.can_checkout:
         await state.clear()
-        await message.answer("سبد خرید شما خالی شده است. تسویه حساب لغو شد.")
+        await message.answer(
+            "سبد خرید در زمان تسویه تغییر کرده است. ابتدا سبد را بررسی کنید.",
+            reply_markup=checkout_failed_keyboard(),
+        )
         return
+
+    await state.update_data(address=address)
+    await state.set_state(CheckoutStates.confirming)
+    data = await state.get_data()
 
     lines = [
         "✅ <b>بررسی نهایی سفارش</b>",
@@ -182,7 +173,6 @@ async def confirm_checkout(callback: CallbackQuery, state: FSMContext) -> None:
         phone=data["phone"],
         address=data["address"],
     )
-
     await state.clear()
 
     if order is None:
@@ -211,7 +201,8 @@ async def cancel_checkout_callback(callback: CallbackQuery, state: FSMContext) -
 
     if callback.message is not None:
         await callback.message.edit_text(
-            "تسویه حساب لغو شد. سبد خرید شما دست‌نخورده باقی ماند."
+            "تسویه حساب لغو شد. سبد خرید شما دست‌نخورده باقی ماند.",
+            reply_markup=checkout_cancelled_keyboard(),
         )
 
     await callback.answer()

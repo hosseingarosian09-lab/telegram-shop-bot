@@ -3,8 +3,10 @@
 __pycache__/
 *.py[cod]
 *.log
+logs/
 .vscode/
 .idea/
+.DS_Store
 
 # Local SQLite database
 data/*.db

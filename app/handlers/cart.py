@@ -1,6 +1,7 @@
 from html import escape
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.keyboards.cart import (
@@ -37,11 +38,15 @@ def build_cart_text(snapshot) -> str:
                 f"{index}. <b>{escape(entry.name)}</b>",
                 f"   {format_price(entry.price)} × {entry.quantity}",
                 f"   جمع: {format_price(entry.subtotal)}",
-                "",
             ]
         )
+        if entry.issue:
+            lines.append(f"   ⚠️ {escape(entry.issue)}")
+        lines.append("")
 
     lines.append(f"💰 <b>مبلغ کل: {format_price(snapshot.total)}</b>")
+    if snapshot.has_issues:
+        lines.append("\n⚠️ برای ثبت سفارش ابتدا موارد نامعتبر سبد را اصلاح یا حذف کنید.")
 
     return "\n".join(lines)
 
@@ -51,11 +56,7 @@ async def show_cart_from_message(message: Message) -> None:
         return
 
     snapshot = await get_cart_snapshot(message.from_user.id)
-
-    if snapshot.entries:
-        markup = cart_keyboard(snapshot)
-    else:
-        markup = empty_cart_keyboard()
+    markup = cart_keyboard(snapshot) if snapshot.entries else empty_cart_keyboard()
 
     await message.answer(
         build_cart_text(snapshot),
@@ -69,12 +70,7 @@ async def refresh_cart_callback(callback: CallbackQuery) -> None:
         return
 
     snapshot = await get_cart_snapshot(callback.from_user.id)
-
-    if snapshot.entries:
-        markup = cart_keyboard(snapshot)
-    else:
-        markup = empty_cart_keyboard()
-
+    markup = cart_keyboard(snapshot) if snapshot.entries else empty_cart_keyboard()
     text = build_cart_text(snapshot)
 
     if callback.message.photo:
@@ -94,12 +90,14 @@ async def refresh_cart_callback(callback: CallbackQuery) -> None:
 
 
 @router.message(F.text == "🛒 سبد خرید")
-async def cart_menu_handler(message: Message) -> None:
+async def cart_menu_handler(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await show_cart_from_message(message)
 
 
 @router.callback_query(F.data == "cart:show")
-async def show_cart_callback(callback: CallbackQuery) -> None:
+async def show_cart_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     await refresh_cart_callback(callback)
     await callback.answer()
 
@@ -120,11 +118,7 @@ async def add_to_cart_callback(callback: CallbackQuery) -> None:
         telegram_user_id=callback.from_user.id,
         product_id=product_id,
     )
-
-    await callback.answer(
-        message,
-        show_alert=not success,
-    )
+    await callback.answer(message, show_alert=not success)
 
 
 @router.callback_query(F.data.startswith("cart:inc:"))
@@ -139,14 +133,9 @@ async def increase_callback(callback: CallbackQuery) -> None:
         await callback.answer("آیتم نامعتبر است.", show_alert=True)
         return
 
-    success, message = await increase_quantity(
-        callback.from_user.id,
-        cart_item_id,
-    )
-
+    success, message = await increase_quantity(callback.from_user.id, cart_item_id)
     if success:
         await refresh_cart_callback(callback)
-
     await callback.answer(message, show_alert=not success)
 
 
@@ -162,14 +151,9 @@ async def decrease_callback(callback: CallbackQuery) -> None:
         await callback.answer("آیتم نامعتبر است.", show_alert=True)
         return
 
-    success, message = await decrease_quantity(
-        callback.from_user.id,
-        cart_item_id,
-    )
-
+    success, message = await decrease_quantity(callback.from_user.id, cart_item_id)
     if success:
         await refresh_cart_callback(callback)
-
     await callback.answer(message, show_alert=not success)
 
 
@@ -185,14 +169,9 @@ async def remove_callback(callback: CallbackQuery) -> None:
         await callback.answer("آیتم نامعتبر است.", show_alert=True)
         return
 
-    success, message = await remove_item(
-        callback.from_user.id,
-        cart_item_id,
-    )
-
+    success, message = await remove_item(callback.from_user.id, cart_item_id)
     if success:
         await refresh_cart_callback(callback)
-
     await callback.answer(message, show_alert=not success)
 
 

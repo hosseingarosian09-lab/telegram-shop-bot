@@ -7,32 +7,66 @@ def cart_keyboard(snapshot: CartSnapshot) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
     for entry in snapshot.entries:
-        rows.append(
-            [
-                InlineKeyboardButton(text="➖", callback_data=f"cart:dec:{entry.cart_item_id}"),
-                InlineKeyboardButton(text=str(entry.quantity), callback_data="cart:noop"),
-                InlineKeyboardButton(text="➕", callback_data=f"cart:inc:{entry.cart_item_id}"),
-                InlineKeyboardButton(text="🗑", callback_data=f"cart:remove:{entry.cart_item_id}"),
-            ]
+        row: list[InlineKeyboardButton] = []
+        if entry.quantity > 1:
+            row.append(
+                InlineKeyboardButton(
+                    text="➖",
+                    callback_data=f"cart:dec:{entry.cart_item_id}",
+                )
+            )
+        else:
+            row.append(InlineKeyboardButton(text="−", callback_data="cart:noop"))
+
+        row.append(
+            InlineKeyboardButton(
+                text=str(entry.quantity),
+                callback_data="cart:noop",
+            )
         )
 
-    rows.append(
-        [InlineKeyboardButton(text="✅ ثبت سفارش", callback_data="cart:checkout")]
-    )
-    rows.append(
-        [InlineKeyboardButton(text="🗑 خالی کردن سبد", callback_data="cart:clear:confirm")]
-    )
-    rows.append(
-        [InlineKeyboardButton(text="🛍 ادامه خرید", callback_data="catalog:categories")]
-    )
+        if entry.can_increase:
+            row.append(
+                InlineKeyboardButton(
+                    text="➕",
+                    callback_data=f"cart:inc:{entry.cart_item_id}",
+                )
+            )
+        else:
+            row.append(InlineKeyboardButton(text="+", callback_data="cart:noop"))
 
+        row.append(
+            InlineKeyboardButton(
+                text="🗑",
+                callback_data=f"cart:remove:{entry.cart_item_id}",
+            )
+        )
+        rows.append(row)
+
+    if snapshot.can_checkout:
+        rows.append(
+            [InlineKeyboardButton(text="✅ ثبت سفارش", callback_data="cart:checkout")]
+        )
+    else:
+        rows.append(
+            [InlineKeyboardButton(text="⚠️ ابتدا مشکل سبد را رفع کنید", callback_data="cart:noop")]
+        )
+
+    rows.extend(
+        [
+            [InlineKeyboardButton(text="🗑 خالی کردن سبد", callback_data="cart:clear:confirm")],
+            [InlineKeyboardButton(text="🛍 ادامه خرید", callback_data="catalog:categories")],
+            [InlineKeyboardButton(text="🏠 منوی اصلی", callback_data="user:home")],
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def empty_cart_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🛍 مشاهده کتاب‌ها", callback_data="catalog:categories")]
+            [InlineKeyboardButton(text="🛍 مشاهده کتاب‌ها", callback_data="catalog:categories")],
+            [InlineKeyboardButton(text="🏠 منوی اصلی", callback_data="user:home")],
         ]
     )
 

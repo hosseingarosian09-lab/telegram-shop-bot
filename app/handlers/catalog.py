@@ -2,6 +2,7 @@ from html import escape
 from pathlib import Path
 
 from aiogram import Bot, F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from app.config import ROOT_DIR
@@ -30,44 +31,50 @@ async def send_categories(message: Message) -> None:
     async with SessionFactory() as session:
         categories = await get_active_categories(session)
 
-    if not categories:
-        await message.answer("فعلاً دسته‌بندی فعالی وجود ندارد.")
-        return
-
+    text = (
+        "📚 دسته‌بندی کتاب‌ها:"
+        if categories
+        else "فعلاً دسته‌بندی فعالی وجود ندارد."
+    )
     await message.answer(
-        "📚 دسته‌بندی کتاب‌ها:",
+        text,
         reply_markup=categories_keyboard(categories),
     )
 
 
 @router.message(F.text == "🛍 محصولات")
-async def products_menu_handler(message: Message) -> None:
+async def products_menu_handler(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await send_categories(message)
 
 
 @router.callback_query(F.data == "catalog:categories")
-async def categories_callback(callback: CallbackQuery) -> None:
+async def categories_callback(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message is None:
         await callback.answer()
         return
 
+    await state.clear()
+
     async with SessionFactory() as session:
         categories = await get_active_categories(session)
 
-    if not categories:
-        await callback.answer("دسته‌بندی فعالی وجود ندارد.", show_alert=True)
-        return
+    text = (
+        "📚 دسته‌بندی کتاب‌ها:"
+        if categories
+        else "فعلاً دسته‌بندی فعالی وجود ندارد."
+    )
 
     if callback.message.photo:
         await callback.message.delete()
         await callback.bot.send_message(
             chat_id=callback.message.chat.id,
-            text="📚 دسته‌بندی کتاب‌ها:",
+            text=text,
             reply_markup=categories_keyboard(categories),
         )
     else:
         await callback.message.edit_text(
-            "📚 دسته‌بندی کتاب‌ها:",
+            text,
             reply_markup=categories_keyboard(categories),
         )
 
@@ -75,10 +82,12 @@ async def categories_callback(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("category:"))
-async def category_callback(callback: CallbackQuery) -> None:
+async def category_callback(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message is None or callback.data is None:
         await callback.answer()
         return
+
+    await state.clear()
 
     try:
         category_id = int(callback.data.split(":", 1)[1])
@@ -88,18 +97,19 @@ async def category_callback(callback: CallbackQuery) -> None:
 
     async with SessionFactory() as session:
         category = await get_category(session, category_id)
-
         if category is None:
-            await callback.answer("این دسته‌بندی پیدا نشد.", show_alert=True)
+            await callback.answer(
+                "این دسته‌بندی دیگر در دسترس نیست.",
+                show_alert=True,
+            )
             return
-
         products = await get_products_by_category(session, category_id)
 
-    if not products:
-        await callback.answer("این دسته‌بندی فعلاً کتابی ندارد.", show_alert=True)
-        return
-
-    text = f"{escape(category.name)}\n\nیک کتاب را انتخاب کنید:"
+    text = (
+        f"{escape(category.name)}\n\nیک کتاب را انتخاب کنید:"
+        if products
+        else f"{escape(category.name)}\n\nفعلاً کتاب فعالی در این دسته‌بندی وجود ندارد."
+    )
 
     if callback.message.photo:
         await callback.message.delete()
@@ -118,10 +128,12 @@ async def category_callback(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("product:"))
-async def product_callback(callback: CallbackQuery, bot: Bot) -> None:
+async def product_callback(callback: CallbackQuery, bot: Bot, state: FSMContext) -> None:
     if callback.message is None or callback.data is None:
         await callback.answer()
         return
+
+    await state.clear()
 
     try:
         product_id = int(callback.data.split(":", 1)[1])
@@ -133,15 +145,13 @@ async def product_callback(callback: CallbackQuery, bot: Bot) -> None:
         product = await get_product(session, product_id)
 
     if product is None:
-        await callback.answer("این کتاب پیدا نشد.", show_alert=True)
+        await callback.answer(
+            "این کتاب دیگر در دسترس نیست.",
+            show_alert=True,
+        )
         return
 
-    stock_text = (
-        f"{product.stock} عدد"
-        if product.stock > 0
-        else "ناموجود"
-    )
-
+    stock_text = f"{product.stock} عدد" if product.stock > 0 else "ناموجود"
     caption = (
         f"<b>{escape(product.name)}</b>\n"
         f"✍️ {escape(product.author)}\n\n"
@@ -151,7 +161,6 @@ async def product_callback(callback: CallbackQuery, bot: Bot) -> None:
     )
 
     image_path = Path(ROOT_DIR) / product.image_path
-
     await callback.message.delete()
 
     markup = product_detail_keyboard(

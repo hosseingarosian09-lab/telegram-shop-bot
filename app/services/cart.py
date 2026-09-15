@@ -9,7 +9,7 @@ from app.database.cart_repository import (
     get_cart_item,
     get_cart_item_by_id,
 )
-from app.database.models import CartItem, Product
+from app.database.models import CartItem, Category, Product
 from app.database.session import SessionFactory
 
 
@@ -21,10 +21,16 @@ class CartEntry:
     price: int
     stock: int
     quantity: int
+    is_available: bool
+    issue: str | None
 
     @property
     def subtotal(self) -> int:
         return self.price * self.quantity
+
+    @property
+    def can_increase(self) -> bool:
+        return self.is_available and self.quantity < self.stock
 
 
 @dataclass(frozen=True)
@@ -35,13 +41,47 @@ class CartSnapshot:
     def total(self) -> int:
         return sum(entry.subtotal for entry in self.entries)
 
+    @property
+    def can_checkout(self) -> bool:
+        return bool(self.entries) and all(entry.is_available for entry in self.entries)
+
+    @property
+    def has_issues(self) -> bool:
+        return any(not entry.is_available for entry in self.entries)
+
+
+def _availability(
+    product: Product,
+    category: Category,
+    quantity: int,
+) -> tuple[bool, str | None]:
+    if not category.is_active:
+        return False, "دسته‌بندی این کتاب غیرفعال شده است."
+
+    if not product.is_active:
+        return False, "این کتاب غیرفعال شده است."
+
+    if product.stock <= 0:
+        return False, "این کتاب فعلاً ناموجود است."
+
+    if quantity > product.stock:
+        return False, f"فقط {product.stock} عدد در انبار موجود است."
+
+    return True, None
+
 
 async def get_cart_snapshot(telegram_user_id: int) -> CartSnapshot:
     async with SessionFactory() as session:
         rows = await get_cart_entries(session, telegram_user_id)
 
-    return CartSnapshot(
-        entries=[
+    entries: list[CartEntry] = []
+    for cart_item, product, category in rows:
+        is_available, issue = _availability(
+            product,
+            category,
+            cart_item.quantity,
+        )
+        entries.append(
             CartEntry(
                 cart_item_id=cart_item.id,
                 product_id=product.id,
@@ -49,10 +89,12 @@ async def get_cart_snapshot(telegram_user_id: int) -> CartSnapshot:
                 price=product.price,
                 stock=product.stock,
                 quantity=cart_item.quantity,
+                is_available=is_available,
+                issue=issue,
             )
-            for cart_item, product in rows
-        ]
-    )
+        )
+
+    return CartSnapshot(entries=entries)
 
 
 async def add_product(
@@ -61,14 +103,17 @@ async def add_product(
 ) -> tuple[bool, str]:
     async with SessionFactory() as session:
         product = await session.scalar(
-            select(Product).where(
+            select(Product)
+            .join(Category, Category.id == Product.category_id)
+            .where(
                 Product.id == product_id,
                 Product.is_active.is_(True),
+                Category.is_active.is_(True),
             )
         )
 
         if product is None:
-            return False, "این کتاب پیدا نشد."
+            return False, "این کتاب دیگر در دسترس نیست."
 
         if product.stock <= 0:
             return False, "این کتاب فعلاً ناموجود است."
@@ -113,9 +158,12 @@ async def increase_quantity(
             return False, "این آیتم دیگر در سبد وجود ندارد."
 
         product = await session.scalar(
-            select(Product).where(
+            select(Product)
+            .join(Category, Category.id == Product.category_id)
+            .where(
                 Product.id == cart_item.product_id,
                 Product.is_active.is_(True),
+                Category.is_active.is_(True),
             )
         )
 

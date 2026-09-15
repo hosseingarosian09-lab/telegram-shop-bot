@@ -1,8 +1,10 @@
 from html import escape
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from app.keyboards.main_menu import main_menu
 from app.keyboards.orders import order_details_keyboard, orders_keyboard
 from app.services.orders import get_order_details, list_user_orders
 
@@ -26,19 +28,17 @@ def status_label(status: str) -> str:
     return STATUS_LABELS.get(status, status)
 
 
-@router.message(F.text == "📦 سفارش‌های من")
-async def my_orders_handler(message: Message) -> None:
-    if message.from_user is None:
-        return
-
-    orders = await list_user_orders(message.from_user.id)
+async def _send_orders(message: Message, telegram_user_id: int) -> None:
+    orders = await list_user_orders(telegram_user_id)
 
     if not orders:
-        await message.answer("📦 هنوز سفارشی ثبت نکرده‌اید.")
+        await message.answer(
+            "📦 هنوز سفارشی ثبت نکرده‌اید.",
+            reply_markup=main_menu,
+        )
         return
 
     lines = ["📦 <b>آخرین سفارش‌های شما</b>", ""]
-
     for order in orders:
         lines.extend(
             [
@@ -57,21 +57,28 @@ async def my_orders_handler(message: Message) -> None:
     )
 
 
+@router.message(F.text == "📦 سفارش‌های من")
+async def my_orders_handler(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    if message.from_user is None:
+        return
+    await _send_orders(message, message.from_user.id)
+
+
 @router.callback_query(F.data == "orders:list")
-async def orders_list_callback(callback: CallbackQuery) -> None:
+async def orders_list_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     if callback.message is None:
         await callback.answer()
         return
 
     orders = await list_user_orders(callback.from_user.id)
-
     if not orders:
         await callback.message.edit_text("📦 هنوز سفارشی ثبت نکرده‌اید.")
         await callback.answer()
         return
 
     lines = ["📦 <b>آخرین سفارش‌های شما</b>", ""]
-
     for order in orders:
         lines.extend(
             [
@@ -92,7 +99,8 @@ async def orders_list_callback(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("order:view:"))
-async def order_details_callback(callback: CallbackQuery) -> None:
+async def order_details_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
     if callback.message is None or callback.data is None:
         await callback.answer()
         return
@@ -104,7 +112,6 @@ async def order_details_callback(callback: CallbackQuery) -> None:
         return
 
     order = await get_order_details(callback.from_user.id, order_id)
-
     if order is None:
         await callback.answer("این سفارش پیدا نشد.", show_alert=True)
         return

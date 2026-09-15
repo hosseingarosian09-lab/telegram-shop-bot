@@ -20,23 +20,31 @@ from app.database.base import Base
 
 class Category(Base):
     __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_category_name"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    products: Mapped[list["Product"]] = relationship(
-        back_populates="category",
-        cascade="all, delete-orphan",
-    )
+    products: Mapped[list["Product"]] = relationship(back_populates="category")
 
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint("price > 0", name="ck_product_price_positive"),
+        CheckConstraint("stock >= 0", name="ck_product_stock_nonnegative"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), nullable=False, index=True)
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id"),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     author: Mapped[str] = mapped_column(String(160), nullable=False)
     price: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -51,26 +59,52 @@ class Product(Base):
 class CartItem(Base):
     __tablename__ = "cart_items"
     __table_args__ = (
-        UniqueConstraint("telegram_user_id", "product_id", name="uq_cart_user_product"),
+        UniqueConstraint(
+            "telegram_user_id",
+            "product_id",
+            name="uq_cart_user_product",
+        ),
         CheckConstraint("quantity > 0", name="ck_cart_quantity_positive"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False, index=True)
+    telegram_user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        index=True,
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id"),
+        nullable=False,
+        index=True,
+    )
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        CheckConstraint("total_amount >= 0", name="ck_order_total_nonnegative"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    telegram_user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        index=True,
+    )
     customer_name: Mapped[str] = mapped_column(String(100), nullable=False)
     phone: Mapped[str] = mapped_column(String(30), nullable=False)
     address: Mapped[str] = mapped_column(Text, nullable=False)
     total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending", index=True)
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="pending",
+        index=True,
+    )
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    stock_restored: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -86,10 +120,21 @@ class Order(Base):
 
 class OrderItem(Base):
     __tablename__ = "order_items"
+    __table_args__ = (
+        CheckConstraint("unit_price > 0", name="ck_order_item_price_positive"),
+        CheckConstraint("quantity > 0", name="ck_order_item_quantity_positive"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False, index=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id"),
+        nullable=False,
+        index=True,
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id"),
+        nullable=False,
+    )
     product_name: Mapped[str] = mapped_column(String(200), nullable=False)
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)

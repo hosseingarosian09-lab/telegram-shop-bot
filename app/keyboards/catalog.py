@@ -3,9 +3,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from app.database.models import Category, Product
 
 
-def categories_keyboard(
-    categories: list[Category],
-) -> InlineKeyboardMarkup:
+def categories_keyboard(categories: list[Category]) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -15,13 +13,13 @@ def categories_keyboard(
         ]
         for category in categories
     ]
-
+    rows.append(
+        [InlineKeyboardButton(text="🏠 منوی اصلی", callback_data="user:home")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def products_keyboard(
-    products: list[Product],
-) -> InlineKeyboardMarkup:
+def products_keyboard(products: list[Product]) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -31,16 +29,12 @@ def products_keyboard(
         ]
         for product in products
     ]
-
-    rows.append(
+    rows.extend(
         [
-            InlineKeyboardButton(
-                text="⬅️ دسته‌بندی‌ها",
-                callback_data="catalog:categories",
-            )
+            [InlineKeyboardButton(text="⬅️ دسته‌بندی‌ها", callback_data="catalog:categories")],
+            [InlineKeyboardButton(text="🏠 منوی اصلی", callback_data="user:home")],
         ]
     )
-
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -61,31 +55,12 @@ def product_detail_keyboard(
             ]
         )
 
-    rows.append(
+    rows.extend(
         [
-            InlineKeyboardButton(
-                text="🛒 مشاهده سبد",
-                callback_data="cart:show",
-            )
+            [InlineKeyboardButton(text="🛒 مشاهده سبد", callback_data="cart:show")],
+            [InlineKeyboardButton(text="⬅️ برگشت به کتاب‌ها", callback_data=f"category:{category_id}")],
+            [InlineKeyboardButton(text="📚 دسته‌بندی‌ها", callback_data="catalog:categories")],
+            [InlineKeyboardButton(text="🏠 منوی اصلی", callback_data="user:home")],
         ]
     )
-
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text="⬅️ برگشت به کتاب‌ها",
-                callback_data=f"category:{category_id}",
-            )
-        ]
-    )
-
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text="🏠 دسته‌بندی‌ها",
-                callback_data="catalog:categories",
-            )
-        ]
-    )
-
     return InlineKeyboardMarkup(inline_keyboard=rows)

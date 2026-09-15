@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
-from app.database.models import CartItem, Order, OrderItem, Product
+from app.database.models import CartItem, Category, Order, OrderItem, Product
 from app.database.order_repository import get_user_order_with_items, get_user_orders
 from app.database.session import SessionFactory
 
@@ -58,8 +58,9 @@ async def create_order_from_cart(
     async with SessionFactory() as session:
         async with session.begin():
             result = await session.execute(
-                select(CartItem, Product)
+                select(CartItem, Product, Category)
                 .join(Product, Product.id == CartItem.product_id)
+                .join(Category, Category.id == Product.category_id)
                 .where(CartItem.telegram_user_id == telegram_user_id)
                 .order_by(CartItem.id)
             )
@@ -68,9 +69,15 @@ async def create_order_from_cart(
             if not rows:
                 return None, "سبد خرید شما خالی است."
 
-            for cart_item, product in rows:
+            for cart_item, product, category in rows:
+                if not category.is_active:
+                    return None, f"دسته‌بندی کتاب «{product.name}» غیرفعال شده است."
+
                 if not product.is_active:
                     return None, f"کتاب «{product.name}» دیگر فعال نیست."
+
+                if product.price <= 0:
+                    return None, f"قیمت کتاب «{product.name}» معتبر نیست."
 
                 if cart_item.quantity > product.stock:
                     return (
@@ -80,7 +87,7 @@ async def create_order_from_cart(
 
             total_amount = sum(
                 product.price * cart_item.quantity
-                for cart_item, product in rows
+                for cart_item, product, _category in rows
             )
 
             order = Order(
@@ -90,11 +97,13 @@ async def create_order_from_cart(
                 address=address,
                 total_amount=total_amount,
                 status="pending",
+                is_archived=False,
+                stock_restored=False,
             )
             session.add(order)
             await session.flush()
 
-            for cart_item, product in rows:
+            for cart_item, product, _category in rows:
                 session.add(
                     OrderItem(
                         order_id=order.id,
@@ -139,7 +148,11 @@ async def get_order_details(
     order_id: int,
 ) -> OrderDetails | None:
     async with SessionFactory() as session:
-        order = await get_user_order_with_items(session, telegram_user_id, order_id)
+        order = await get_user_order_with_items(
+            session,
+            telegram_user_id,
+            order_id,
+        )
 
         if order is None:
             return None

@@ -36,9 +36,11 @@ async def get_product_any(
 async def get_latest_orders(
     session: AsyncSession,
     limit: int = 20,
+    archived: bool = False,
 ) -> list[Order]:
     result = await session.scalars(
         select(Order)
+        .where(Order.is_archived.is_(archived))
         .order_by(Order.id.desc())
         .limit(limit)
     )

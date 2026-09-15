@@ -1,7 +1,7 @@
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import CartItem, Product
+from app.database.models import CartItem, Category, Product
 
 
 async def get_cart_item(
@@ -33,21 +33,15 @@ async def get_cart_item_by_id(
 async def get_cart_entries(
     session: AsyncSession,
     telegram_user_id: int,
-) -> list[tuple[CartItem, Product]]:
+) -> list[tuple[CartItem, Product, Category]]:
     result = await session.execute(
-        select(CartItem, Product)
+        select(CartItem, Product, Category)
         .join(Product, Product.id == CartItem.product_id)
-        .where(
-            CartItem.telegram_user_id == telegram_user_id,
-            Product.is_active.is_(True),
-        )
+        .join(Category, Category.id == Product.category_id)
+        .where(CartItem.telegram_user_id == telegram_user_id)
         .order_by(CartItem.id)
     )
-
-    return [
-        (cart_item, product)
-        for cart_item, product in result.all()
-    ]
+    return list(result.all())
 
 
 async def delete_cart_item(
